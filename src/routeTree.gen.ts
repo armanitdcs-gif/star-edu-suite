@@ -10,11 +10,17 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as MAdmissionRouteImport } from './routes/m.admission'
 import { Route as MSlugRouteImport } from './routes/m.$slug'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const MAdmissionRoute = MAdmissionRouteImport.update({
+  id: '/m/admission',
+  path: '/m/admission',
   getParentRoute: () => rootRouteImport,
 } as any)
 const MSlugRoute = MSlugRouteImport.update({
@@ -26,27 +32,31 @@ const MSlugRoute = MSlugRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/m/$slug': typeof MSlugRoute
+  '/m/admission': typeof MAdmissionRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/m/$slug': typeof MSlugRoute
+  '/m/admission': typeof MAdmissionRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/m/$slug': typeof MSlugRoute
+  '/m/admission': typeof MAdmissionRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/m/$slug'
+  fullPaths: '/' | '/m/$slug' | '/m/admission'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/m/$slug'
-  id: '__root__' | '/' | '/m/$slug'
+  to: '/' | '/m/$slug' | '/m/admission'
+  id: '__root__' | '/' | '/m/$slug' | '/m/admission'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   MSlugRoute: typeof MSlugRoute
+  MAdmissionRoute: typeof MAdmissionRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -56,6 +66,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/m/admission': {
+      id: '/m/admission'
+      path: '/m/admission'
+      fullPath: '/m/admission'
+      preLoaderRoute: typeof MAdmissionRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/m/$slug': {
@@ -71,6 +88,7 @@ declare module '@tanstack/react-router' {
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   MSlugRoute: MSlugRoute,
+  MAdmissionRoute: MAdmissionRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
