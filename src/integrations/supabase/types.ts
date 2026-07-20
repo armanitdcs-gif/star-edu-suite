@@ -14,7 +14,90 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      admission_applications: {
+        Row: {
+          academic_year: string
+          address: string
+          admin_notes: string | null
+          application_no: string
+          applying_for_grade: string
+          birth_certificate_no: string | null
+          created_at: string
+          date_of_birth: string
+          gender: Database["public"]["Enums"]["admission_gender"]
+          guardian_email: string | null
+          guardian_name: string
+          guardian_phone: string
+          guardian_relation: string
+          id: string
+          medical_notes: string | null
+          nationality: string
+          passport_no: string | null
+          previous_school: string | null
+          qid_no: string | null
+          religion: string | null
+          status: Database["public"]["Enums"]["admission_status"]
+          student_first_name: string
+          student_id: string | null
+          student_last_name: string
+          updated_at: string
+        }
+        Insert: {
+          academic_year?: string
+          address: string
+          admin_notes?: string | null
+          application_no?: string
+          applying_for_grade: string
+          birth_certificate_no?: string | null
+          created_at?: string
+          date_of_birth: string
+          gender: Database["public"]["Enums"]["admission_gender"]
+          guardian_email?: string | null
+          guardian_name: string
+          guardian_phone: string
+          guardian_relation?: string
+          id?: string
+          medical_notes?: string | null
+          nationality: string
+          passport_no?: string | null
+          previous_school?: string | null
+          qid_no?: string | null
+          religion?: string | null
+          status?: Database["public"]["Enums"]["admission_status"]
+          student_first_name: string
+          student_id?: string | null
+          student_last_name: string
+          updated_at?: string
+        }
+        Update: {
+          academic_year?: string
+          address?: string
+          admin_notes?: string | null
+          application_no?: string
+          applying_for_grade?: string
+          birth_certificate_no?: string | null
+          created_at?: string
+          date_of_birth?: string
+          gender?: Database["public"]["Enums"]["admission_gender"]
+          guardian_email?: string | null
+          guardian_name?: string
+          guardian_phone?: string
+          guardian_relation?: string
+          id?: string
+          medical_notes?: string | null
+          nationality?: string
+          passport_no?: string | null
+          previous_school?: string | null
+          qid_no?: string | null
+          religion?: string | null
+          status?: Database["public"]["Enums"]["admission_status"]
+          student_first_name?: string
+          student_id?: string | null
+          student_last_name?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
@@ -23,7 +106,8 @@ export type Database = {
       [_ in never]: never
     }
     Enums: {
-      [_ in never]: never
+      admission_gender: "male" | "female" | "other"
+      admission_status: "pending" | "interview" | "approved" | "rejected"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -150,6 +234,9 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      admission_gender: ["male", "female", "other"],
+      admission_status: ["pending", "interview", "approved", "rejected"],
+    },
   },
 } as const
