@@ -650,7 +650,7 @@ function AdmitDialog({ app, sections, onClose, onAdmit, T }: {
   app: Application | null;
   sections: ClassSection[];
   onClose: () => void;
-  onAdmit: (app: Application, classSectionId: string, rollNo: string) => Promise<void> | void;
+  onAdmit: (app: Application, classSectionId: string, rollNo: string) => Promise<unknown> | unknown;
   T: (en: string, bn: string) => string;
 }) {
   const [sectionId, setSectionId] = useState<string>("");
