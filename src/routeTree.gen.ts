@@ -10,12 +10,18 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as MSisRouteImport } from './routes/m.sis'
 import { Route as MAdmissionRouteImport } from './routes/m.admission'
 import { Route as MSlugRouteImport } from './routes/m.$slug'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const MSisRoute = MSisRouteImport.update({
+  id: '/m/sis',
+  path: '/m/sis',
   getParentRoute: () => rootRouteImport,
 } as any)
 const MAdmissionRoute = MAdmissionRouteImport.update({
@@ -33,30 +39,34 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/m/$slug': typeof MSlugRoute
   '/m/admission': typeof MAdmissionRoute
+  '/m/sis': typeof MSisRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/m/$slug': typeof MSlugRoute
   '/m/admission': typeof MAdmissionRoute
+  '/m/sis': typeof MSisRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/m/$slug': typeof MSlugRoute
   '/m/admission': typeof MAdmissionRoute
+  '/m/sis': typeof MSisRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/m/$slug' | '/m/admission'
+  fullPaths: '/' | '/m/$slug' | '/m/admission' | '/m/sis'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/m/$slug' | '/m/admission'
-  id: '__root__' | '/' | '/m/$slug' | '/m/admission'
+  to: '/' | '/m/$slug' | '/m/admission' | '/m/sis'
+  id: '__root__' | '/' | '/m/$slug' | '/m/admission' | '/m/sis'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   MSlugRoute: typeof MSlugRoute
   MAdmissionRoute: typeof MAdmissionRoute
+  MSisRoute: typeof MSisRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -66,6 +76,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/m/sis': {
+      id: '/m/sis'
+      path: '/m/sis'
+      fullPath: '/m/sis'
+      preLoaderRoute: typeof MSisRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/m/admission': {
@@ -89,7 +106,18 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   MSlugRoute: MSlugRoute,
   MAdmissionRoute: MAdmissionRoute,
+  MSisRoute: MSisRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
+
+import type { getRouter } from './router.tsx'
+import type { startInstance } from './start.ts'
+declare module '@tanstack/react-start' {
+  interface Register {
+    ssr: true
+    router: Awaited<ReturnType<typeof getRouter>>
+    config: Awaited<ReturnType<typeof startInstance.getOptions>>
+  }
+}
