@@ -28,6 +28,8 @@ import type { Database } from "@/integrations/supabase/types";
 
 type Application = Database["public"]["Tables"]["admission_applications"]["Row"];
 type Status = Database["public"]["Enums"]["admission_status"];
+type ClassSection = Database["public"]["Tables"]["class_sections"]["Row"];
+
 
 const grades = [
   "KG-1", "KG-2", "Grade 1", "Grade 2", "Grade 3", "Grade 4", "Grade 5",
