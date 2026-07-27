@@ -28,6 +28,8 @@ import type { Database } from "@/integrations/supabase/types";
 
 type Application = Database["public"]["Tables"]["admission_applications"]["Row"];
 type Status = Database["public"]["Enums"]["admission_status"];
+type ClassSection = Database["public"]["Tables"]["class_sections"]["Row"];
+
 
 const grades = [
   "KG-1", "KG-2", "Grade 1", "Grade 2", "Grade 3", "Grade 4", "Grade 5",
@@ -80,10 +82,13 @@ export function AdmissionModule() {
   const [submitting, setSubmitting] = useState(false);
 
   const [rows, setRows] = useState<Application[]>([]);
+  const [sections, setSections] = useState<ClassSection[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | Status>("all");
   const [selected, setSelected] = useState<Application | null>(null);
+  const [admitting, setAdmitting] = useState<Application | null>(null);
+
 
   const T = (en: string, bn: string) => (lang === "en" ? en : bn);
 
@@ -98,7 +103,14 @@ export function AdmissionModule() {
     setLoading(false);
   };
 
-  useEffect(() => { void load(); }, []);
+  useEffect(() => {
+    void load();
+    void (async () => {
+      const { data } = await supabase.from("class_sections").select("*").order("grade").order("section");
+      setSections(data ?? []);
+    })();
+  }, []);
+
 
   const stats = useMemo(() => ({
     total: rows.length,
@@ -158,19 +170,77 @@ export function AdmissionModule() {
   };
 
   const updateStatus = async (id: string, status: Status) => {
-    const patch: Partial<Application> = { status };
     if (status === "approved") {
-      patch.student_id = `STU-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`;
+      const app = rows.find((r) => r.id === id) ?? (selected?.id === id ? selected : null);
+      if (app) {
+        setSelected(null);
+        setAdmitting(app);
+      }
+      return;
     }
     const { error } = await supabase
       .from("admission_applications")
-      .update(patch as never)
+      .update({ status } as never)
       .eq("id", id);
     if (error) return toast.error(error.message);
     toast.success(T("Status updated", "স্ট্যাটাস আপডেট হয়েছে"));
-    setSelected((s) => (s && s.id === id ? { ...s, ...patch } as Application : s));
+    setSelected((s) => (s && s.id === id ? { ...s, status } as Application : s));
     void load();
   };
+
+  const admitStudent = async (app: Application, classSectionId: string, rollNo: string) => {
+    const section = sections.find((s) => s.id === classSectionId);
+    if (!section) return toast.error(T("Select a class section", "সেকশন নির্বাচন করুন"));
+
+    const studentNo = `STU-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`;
+
+    const { data: student, error: sErr } = await supabase
+      .from("students")
+      .insert({
+        student_no: studentNo,
+        first_name: app.student_first_name,
+        last_name: app.student_last_name,
+        date_of_birth: app.date_of_birth,
+        gender: app.gender,
+        nationality: app.nationality,
+        religion: app.religion,
+        guardian_name: app.guardian_name,
+        guardian_relation: app.guardian_relation,
+        guardian_phone: app.guardian_phone,
+        guardian_email: app.guardian_email,
+        address: app.address,
+        passport_no: app.passport_no,
+        qid_no: app.qid_no,
+        birth_certificate_no: app.birth_certificate_no,
+        medical_notes: app.medical_notes,
+        admission_application_id: app.id,
+      } as never)
+      .select("id, student_no")
+      .single();
+    if (sErr || !student) return toast.error(sErr?.message ?? "Failed to create student");
+
+    const { error: eErr } = await supabase.from("enrollments").insert({
+      student_id: (student as { id: string }).id,
+      class_section_id: classSectionId,
+      academic_year: section.academic_year,
+      roll_no: rollNo.trim() || null,
+    } as never);
+    if (eErr) return toast.error(eErr.message);
+
+    const { error: aErr } = await supabase
+      .from("admission_applications")
+      .update({ status: "approved", student_id: studentNo } as never)
+      .eq("id", app.id);
+    if (aErr) return toast.error(aErr.message);
+
+    toast.success(
+      T(`Admitted ${app.student_first_name} → ${section.grade} ${section.section} (${studentNo})`,
+        `${app.student_first_name} ভর্তি হয়েছে → ${section.grade} ${section.section} (${studentNo})`),
+    );
+    setAdmitting(null);
+    void load();
+  };
+
 
   const saveNotes = async (id: string, notes: string) => {
     const { error } = await supabase
@@ -419,6 +489,15 @@ export function AdmissionModule() {
         T={T}
       />
 
+      <AdmitDialog
+        app={admitting}
+        sections={sections}
+        onClose={() => setAdmitting(null)}
+        onAdmit={admitStudent}
+        T={T}
+      />
+
+
       <Card className="flex flex-col items-start gap-4 border-dashed p-6 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <div className="font-display text-base font-semibold">
@@ -566,3 +645,113 @@ function Info({ label, value }: { label: string; value: string }) {
     </div>
   );
 }
+
+function AdmitDialog({ app, sections, onClose, onAdmit, T }: {
+  app: Application | null;
+  sections: ClassSection[];
+  onClose: () => void;
+  onAdmit: (app: Application, classSectionId: string, rollNo: string) => Promise<unknown> | unknown;
+  T: (en: string, bn: string) => string;
+}) {
+  const [sectionId, setSectionId] = useState<string>("");
+  const [rollNo, setRollNo] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const options = useMemo(() => {
+    if (!app) return [];
+    return sections.filter(
+      (s) => s.grade === app.applying_for_grade && s.academic_year === app.academic_year,
+    );
+  }, [sections, app]);
+
+  useEffect(() => {
+    setSectionId(options[0]?.id ?? "");
+    setRollNo("");
+  }, [app, options]);
+
+  if (!app) return null;
+
+  return (
+    <Dialog open={!!app} onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Check className="h-5 w-5 text-emerald-600" />
+            {T("Admit to SIS", "SIS-এ ভর্তি করুন")}
+          </DialogTitle>
+          <DialogDescription>
+            {T(
+              `Approve ${app.student_first_name} ${app.student_last_name} and create their student record and class enrollment.`,
+              `${app.student_first_name} ${app.student_last_name}-কে অনুমোদন দিয়ে ছাত্র রেকর্ড ও ক্লাস এনরোলমেন্ট তৈরি করুন।`,
+            )}
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-4">
+          <div className="rounded-lg border bg-muted/30 p-3 text-sm">
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">{T("Grade", "গ্রেড")}</span>
+              <span className="font-medium">{app.applying_for_grade}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">{T("Academic year", "একাডেমিক বছর")}</span>
+              <span className="font-medium">{app.academic_year}</span>
+            </div>
+          </div>
+
+          <div>
+            <Label className="mb-1.5 block text-xs font-medium text-muted-foreground">
+              {T("Class section", "ক্লাস সেকশন")} *
+            </Label>
+            {options.length === 0 ? (
+              <div className="rounded-md border border-dashed p-3 text-xs text-muted-foreground">
+                {T(
+                  `No sections found for ${app.applying_for_grade} (${app.academic_year}). Create one in School Setup.`,
+                  `${app.applying_for_grade} (${app.academic_year}) এর জন্য কোনো সেকশন নেই। School Setup-এ তৈরি করুন।`,
+                )}
+              </div>
+            ) : (
+              <Select value={sectionId} onValueChange={setSectionId}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {options.map((s) => (
+                    <SelectItem key={s.id} value={s.id}>
+                      {s.grade} — {T("Section", "সেকশন")} {s.section}
+                      <span className="ml-2 text-xs text-muted-foreground">
+                        ({T("cap", "ধারণ")} {s.capacity})
+                      </span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+          </div>
+
+          <div>
+            <Label className="mb-1.5 block text-xs font-medium text-muted-foreground">
+              {T("Roll no. (optional)", "রোল নং (ঐচ্ছিক)")}
+            </Label>
+            <Input value={rollNo} onChange={(e) => setRollNo(e.target.value)} placeholder="e.g. 12" />
+          </div>
+        </div>
+
+        <DialogFooter>
+          <Button variant="ghost" onClick={onClose}>{T("Cancel", "বাতিল")}</Button>
+          <Button
+            className="gap-2 bg-emerald-600 text-white hover:bg-emerald-700"
+            disabled={!sectionId || busy}
+            onClick={async () => {
+              setBusy(true);
+              await onAdmit(app, sectionId, rollNo);
+              setBusy(false);
+            }}
+          >
+            {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
+            {T("Confirm admission", "ভর্তি নিশ্চিত করুন")}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
