@@ -82,10 +82,13 @@ export function AdmissionModule() {
   const [submitting, setSubmitting] = useState(false);
 
   const [rows, setRows] = useState<Application[]>([]);
+  const [sections, setSections] = useState<ClassSection[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | Status>("all");
   const [selected, setSelected] = useState<Application | null>(null);
+  const [admitting, setAdmitting] = useState<Application | null>(null);
+
 
   const T = (en: string, bn: string) => (lang === "en" ? en : bn);
 
