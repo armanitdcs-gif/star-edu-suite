@@ -489,6 +489,15 @@ export function AdmissionModule() {
         T={T}
       />
 
+      <AdmitDialog
+        app={admitting}
+        sections={sections}
+        onClose={() => setAdmitting(null)}
+        onAdmit={admitStudent}
+        T={T}
+      />
+
+
       <Card className="flex flex-col items-start gap-4 border-dashed p-6 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <div className="font-display text-base font-semibold">
