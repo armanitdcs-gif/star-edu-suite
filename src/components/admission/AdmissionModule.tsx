@@ -645,3 +645,113 @@ function Info({ label, value }: { label: string; value: string }) {
     </div>
   );
 }
+
+function AdmitDialog({ app, sections, onClose, onAdmit, T }: {
+  app: Application | null;
+  sections: ClassSection[];
+  onClose: () => void;
+  onAdmit: (app: Application, classSectionId: string, rollNo: string) => Promise<void> | void;
+  T: (en: string, bn: string) => string;
+}) {
+  const [sectionId, setSectionId] = useState<string>("");
+  const [rollNo, setRollNo] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const options = useMemo(() => {
+    if (!app) return [];
+    return sections.filter(
+      (s) => s.grade === app.applying_for_grade && s.academic_year === app.academic_year,
+    );
+  }, [sections, app]);
+
+  useEffect(() => {
+    setSectionId(options[0]?.id ?? "");
+    setRollNo("");
+  }, [app, options]);
+
+  if (!app) return null;
+
+  return (
+    <Dialog open={!!app} onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Check className="h-5 w-5 text-emerald-600" />
+            {T("Admit to SIS", "SIS-এ ভর্তি করুন")}
+          </DialogTitle>
+          <DialogDescription>
+            {T(
+              `Approve ${app.student_first_name} ${app.student_last_name} and create their student record and class enrollment.`,
+              `${app.student_first_name} ${app.student_last_name}-কে অনুমোদন দিয়ে ছাত্র রেকর্ড ও ক্লাস এনরোলমেন্ট তৈরি করুন।`,
+            )}
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-4">
+          <div className="rounded-lg border bg-muted/30 p-3 text-sm">
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">{T("Grade", "গ্রেড")}</span>
+              <span className="font-medium">{app.applying_for_grade}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">{T("Academic year", "একাডেমিক বছর")}</span>
+              <span className="font-medium">{app.academic_year}</span>
+            </div>
+          </div>
+
+          <div>
+            <Label className="mb-1.5 block text-xs font-medium text-muted-foreground">
+              {T("Class section", "ক্লাস সেকশন")} *
+            </Label>
+            {options.length === 0 ? (
+              <div className="rounded-md border border-dashed p-3 text-xs text-muted-foreground">
+                {T(
+                  `No sections found for ${app.applying_for_grade} (${app.academic_year}). Create one in School Setup.`,
+                  `${app.applying_for_grade} (${app.academic_year}) এর জন্য কোনো সেকশন নেই। School Setup-এ তৈরি করুন।`,
+                )}
+              </div>
+            ) : (
+              <Select value={sectionId} onValueChange={setSectionId}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {options.map((s) => (
+                    <SelectItem key={s.id} value={s.id}>
+                      {s.grade} — {T("Section", "সেকশন")} {s.section}
+                      <span className="ml-2 text-xs text-muted-foreground">
+                        ({T("cap", "ধারণ")} {s.capacity})
+                      </span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+          </div>
+
+          <div>
+            <Label className="mb-1.5 block text-xs font-medium text-muted-foreground">
+              {T("Roll no. (optional)", "রোল নং (ঐচ্ছিক)")}
+            </Label>
+            <Input value={rollNo} onChange={(e) => setRollNo(e.target.value)} placeholder="e.g. 12" />
+          </div>
+        </div>
+
+        <DialogFooter>
+          <Button variant="ghost" onClick={onClose}>{T("Cancel", "বাতিল")}</Button>
+          <Button
+            className="gap-2 bg-emerald-600 text-white hover:bg-emerald-700"
+            disabled={!sectionId || busy}
+            onClick={async () => {
+              setBusy(true);
+              await onAdmit(app, sectionId, rollNo);
+              setBusy(false);
+            }}
+          >
+            {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
+            {T("Confirm admission", "ভর্তি নিশ্চিত করুন")}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
