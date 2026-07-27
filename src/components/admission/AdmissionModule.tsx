@@ -103,7 +103,14 @@ export function AdmissionModule() {
     setLoading(false);
   };
 
-  useEffect(() => { void load(); }, []);
+  useEffect(() => {
+    void load();
+    void (async () => {
+      const { data } = await supabase.from("class_sections").select("*").order("grade").order("section");
+      setSections(data ?? []);
+    })();
+  }, []);
+
 
   const stats = useMemo(() => ({
     total: rows.length,
