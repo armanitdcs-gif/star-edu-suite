@@ -170,19 +170,77 @@ export function AdmissionModule() {
   };
 
   const updateStatus = async (id: string, status: Status) => {
-    const patch: Partial<Application> = { status };
     if (status === "approved") {
-      patch.student_id = `STU-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`;
+      const app = rows.find((r) => r.id === id) ?? (selected?.id === id ? selected : null);
+      if (app) {
+        setSelected(null);
+        setAdmitting(app);
+      }
+      return;
     }
     const { error } = await supabase
       .from("admission_applications")
-      .update(patch as never)
+      .update({ status } as never)
       .eq("id", id);
     if (error) return toast.error(error.message);
     toast.success(T("Status updated", "স্ট্যাটাস আপডেট হয়েছে"));
-    setSelected((s) => (s && s.id === id ? { ...s, ...patch } as Application : s));
+    setSelected((s) => (s && s.id === id ? { ...s, status } as Application : s));
     void load();
   };
+
+  const admitStudent = async (app: Application, classSectionId: string, rollNo: string) => {
+    const section = sections.find((s) => s.id === classSectionId);
+    if (!section) return toast.error(T("Select a class section", "সেকশন নির্বাচন করুন"));
+
+    const studentNo = `STU-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`;
+
+    const { data: student, error: sErr } = await supabase
+      .from("students")
+      .insert({
+        student_no: studentNo,
+        first_name: app.student_first_name,
+        last_name: app.student_last_name,
+        date_of_birth: app.date_of_birth,
+        gender: app.gender,
+        nationality: app.nationality,
+        religion: app.religion,
+        guardian_name: app.guardian_name,
+        guardian_relation: app.guardian_relation,
+        guardian_phone: app.guardian_phone,
+        guardian_email: app.guardian_email,
+        address: app.address,
+        passport_no: app.passport_no,
+        qid_no: app.qid_no,
+        birth_certificate_no: app.birth_certificate_no,
+        medical_notes: app.medical_notes,
+        admission_application_id: app.id,
+      } as never)
+      .select("id, student_no")
+      .single();
+    if (sErr || !student) return toast.error(sErr?.message ?? "Failed to create student");
+
+    const { error: eErr } = await supabase.from("enrollments").insert({
+      student_id: (student as { id: string }).id,
+      class_section_id: classSectionId,
+      academic_year: section.academic_year,
+      roll_no: rollNo.trim() || null,
+    } as never);
+    if (eErr) return toast.error(eErr.message);
+
+    const { error: aErr } = await supabase
+      .from("admission_applications")
+      .update({ status: "approved", student_id: studentNo } as never)
+      .eq("id", app.id);
+    if (aErr) return toast.error(aErr.message);
+
+    toast.success(
+      T(`Admitted ${app.student_first_name} → ${section.grade} ${section.section} (${studentNo})`,
+        `${app.student_first_name} ভর্তি হয়েছে → ${section.grade} ${section.section} (${studentNo})`),
+    );
+    setAdmitting(null);
+    void load();
+  };
+
 
   const saveNotes = async (id: string, notes: string) => {
     const { error } = await supabase
