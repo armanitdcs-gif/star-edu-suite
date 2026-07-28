@@ -486,10 +486,66 @@ export function AdmissionModule() {
             </div>
           </Card>
 
+          {selectedIds.size > 0 && (
+            <Card className="flex flex-col items-start justify-between gap-3 border-primary/40 bg-primary/5 p-3 shadow-card sm:flex-row sm:items-center">
+              <div className="flex items-center gap-2 text-sm">
+                <CheckSquare className="h-4 w-4 text-primary" />
+                <span className="font-medium">
+                  {T(`${selectedIds.size} selected`, `${selectedIds.size} নির্বাচিত`)}
+                </span>
+                <span className="text-xs text-muted-foreground">
+                  {(() => {
+                    const admittable = filtered.filter(
+                      (r) => selectedIds.has(r.id) && r.status !== "approved",
+                    ).length;
+                    return T(`${admittable} admittable`, `${admittable} ভর্তিযোগ্য`);
+                  })()}
+                </span>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Button size="sm" variant="ghost" onClick={() => setSelectedIds(new Set())}>
+                  {T("Clear", "মুছুন")}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="text-red-600 hover:text-red-700"
+                  onClick={bulkReject}
+                >
+                  <X className="mr-1 h-4 w-4" />{T("Reject", "প্রত্যাখ্যান")}
+                </Button>
+                <Button
+                  size="sm"
+                  className="bg-emerald-600 text-white hover:bg-emerald-700"
+                  onClick={() => setBulkAdmitOpen(true)}
+                >
+                  <Check className="mr-1 h-4 w-4" />{T("Admit selected", "নির্বাচিতদের ভর্তি করুন")}
+                </Button>
+              </div>
+            </Card>
+          )}
+
           <Card className="overflow-hidden shadow-card">
             <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead className="w-10">
+                    <Checkbox
+                      checked={
+                        filtered.length > 0 &&
+                        filtered.every((r) => selectedIds.has(r.id))
+                      }
+                      onCheckedChange={(v) => {
+                        setSelectedIds((prev) => {
+                          const next = new Set(prev);
+                          if (v) filtered.forEach((r) => next.add(r.id));
+                          else filtered.forEach((r) => next.delete(r.id));
+                          return next;
+                        });
+                      }}
+                      aria-label={T("Select all", "সব নির্বাচন")}
+                    />
+                  </TableHead>
                   <TableHead>{T("Application", "আবেদন")}</TableHead>
                   <TableHead>{T("Student", "শিক্ষার্থী")}</TableHead>
                   <TableHead>{T("Grade", "গ্রেড")}</TableHead>
@@ -501,15 +557,28 @@ export function AdmissionModule() {
               </TableHeader>
               <TableBody>
                 {loading ? (
-                  <TableRow><TableCell colSpan={7} className="py-10 text-center">
+                  <TableRow><TableCell colSpan={8} className="py-10 text-center">
                     <Loader2 className="mx-auto h-5 w-5 animate-spin text-muted-foreground" />
                   </TableCell></TableRow>
                 ) : filtered.length === 0 ? (
-                  <TableRow><TableCell colSpan={7} className="py-10 text-center text-sm text-muted-foreground">
+                  <TableRow><TableCell colSpan={8} className="py-10 text-center text-sm text-muted-foreground">
                     {T("No applications found.", "কোনো আবেদন পাওয়া যায়নি।")}
                   </TableCell></TableRow>
                 ) : filtered.map((r) => (
                   <TableRow key={r.id} className="cursor-pointer" onClick={() => setSelected(r)}>
+                    <TableCell onClick={(e) => e.stopPropagation()}>
+                      <Checkbox
+                        checked={selectedIds.has(r.id)}
+                        onCheckedChange={(v) => {
+                          setSelectedIds((prev) => {
+                            const next = new Set(prev);
+                            if (v) next.add(r.id); else next.delete(r.id);
+                            return next;
+                          });
+                        }}
+                        aria-label={T("Select row", "সারি নির্বাচন")}
+                      />
+                    </TableCell>
                     <TableCell className="font-mono text-xs">{r.application_no}</TableCell>
                     <TableCell className="font-medium">{r.student_first_name} {r.student_last_name}</TableCell>
                     <TableCell>{r.applying_for_grade}</TableCell>
@@ -531,6 +600,7 @@ export function AdmissionModule() {
               </TableBody>
             </Table>
           </Card>
+
         </TabsContent>
       </Tabs>
 
