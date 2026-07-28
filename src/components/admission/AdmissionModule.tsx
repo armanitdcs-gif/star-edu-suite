@@ -620,6 +620,18 @@ export function AdmissionModule() {
         T={T}
       />
 
+      <BulkAdmitDialog
+        open={bulkAdmitOpen}
+        apps={rows.filter((r) => selectedIds.has(r.id) && r.status !== "approved")}
+        sections={sections}
+        busy={bulkBusy}
+        onClose={() => setBulkAdmitOpen(false)}
+        onConfirm={bulkAdmit}
+        T={T}
+      />
+
+
+
 
       <Card className="flex flex-col items-start gap-4 border-dashed p-6 sm:flex-row sm:items-center sm:justify-between">
         <div>
