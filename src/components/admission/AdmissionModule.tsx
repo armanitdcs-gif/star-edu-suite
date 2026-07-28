@@ -90,6 +90,10 @@ export function AdmissionModule() {
   const [statusFilter, setStatusFilter] = useState<"all" | Status>("all");
   const [selected, setSelected] = useState<Application | null>(null);
   const [admitting, setAdmitting] = useState<Application | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkAdmitOpen, setBulkAdmitOpen] = useState(false);
+  const [bulkBusy, setBulkBusy] = useState(false);
+
 
 
   const T = (en: string, bn: string) => (lang === "en" ? en : bn);
