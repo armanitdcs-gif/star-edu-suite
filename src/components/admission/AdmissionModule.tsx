@@ -194,9 +194,13 @@ export function AdmissionModule() {
     void load();
   };
 
-  const admitStudent = async (app: Application, classSectionId: string, rollNo: string) => {
+  const performAdmit = async (
+    app: Application,
+    classSectionId: string,
+    rollNo: string,
+  ): Promise<{ ok: true; studentNo: string; section: ClassSection } | { ok: false; error: string }> => {
     const section = sections.find((s) => s.id === classSectionId);
-    if (!section) return toast.error(T("Select a class section", "সেকশন নির্বাচন করুন"));
+    if (!section) return { ok: false, error: "Section not found" };
 
     const studentNo = `STU-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`;
 
@@ -223,7 +227,7 @@ export function AdmissionModule() {
       } as never)
       .select("id, student_no")
       .single();
-    if (sErr || !student) return toast.error(sErr?.message ?? "Failed to create student");
+    if (sErr || !student) return { ok: false, error: sErr?.message ?? "Failed to create student" };
 
     const { error: eErr } = await supabase.from("enrollments").insert({
       student_id: (student as { id: string }).id,
@@ -231,21 +235,64 @@ export function AdmissionModule() {
       academic_year: section.academic_year,
       roll_no: rollNo.trim() || null,
     } as never);
-    if (eErr) return toast.error(eErr.message);
+    if (eErr) return { ok: false, error: eErr.message };
 
     const { error: aErr } = await supabase
       .from("admission_applications")
       .update({ status: "approved", student_id: studentNo } as never)
       .eq("id", app.id);
-    if (aErr) return toast.error(aErr.message);
+    if (aErr) return { ok: false, error: aErr.message };
 
+    return { ok: true, studentNo, section };
+  };
+
+  const admitStudent = async (app: Application, classSectionId: string, rollNo: string) => {
+    const res = await performAdmit(app, classSectionId, rollNo);
+    if (!res.ok) return toast.error(res.error);
     toast.success(
-      T(`Admitted ${app.student_first_name} → ${section.grade} ${section.section} (${studentNo})`,
-        `${app.student_first_name} ভর্তি হয়েছে → ${section.grade} ${section.section} (${studentNo})`),
+      T(`Admitted ${app.student_first_name} → ${res.section.grade} ${res.section.section} (${res.studentNo})`,
+        `${app.student_first_name} ভর্তি হয়েছে → ${res.section.grade} ${res.section.section} (${res.studentNo})`),
     );
     setAdmitting(null);
     void load();
   };
+
+  const bulkAdmit = async (assignments: Record<string, string>) => {
+    // assignments: applicationId -> classSectionId
+    setBulkBusy(true);
+    let success = 0;
+    let failed = 0;
+    for (const app of rows) {
+      const sid = assignments[app.id];
+      if (!sid) continue;
+      if (app.status === "approved") continue;
+      const res = await performAdmit(app, sid, "");
+      if (res.ok) success++; else failed++;
+    }
+    setBulkBusy(false);
+    setBulkAdmitOpen(false);
+    setSelectedIds(new Set());
+    void load();
+    toast.success(
+      T(`Bulk admission complete: ${success} admitted${failed ? `, ${failed} failed` : ""}`,
+        `বাল্ক ভর্তি সম্পন্ন: ${success} জন ভর্তি${failed ? `, ${failed} ব্যর্থ` : ""}`),
+    );
+  };
+
+  const bulkReject = async () => {
+    if (selectedIds.size === 0) return;
+    const ids = Array.from(selectedIds);
+    const { error } = await supabase
+      .from("admission_applications")
+      .update({ status: "rejected" } as never)
+      .in("id", ids);
+    if (error) return toast.error(error.message);
+    toast.success(T(`Rejected ${ids.length} applications`, `${ids.length}টি আবেদন প্রত্যাখ্যাত`));
+    setSelectedIds(new Set());
+    void load();
+  };
+
+
 
 
   const saveNotes = async (id: string, notes: string) => {
