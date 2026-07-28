@@ -2,9 +2,11 @@ import { useEffect, useMemo, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import {
   ArrowLeft, UserPlus, Search, Loader2, Check, X, Sparkles,
-  Users, Clock, CheckCircle2, XCircle, IdCard, Filter,
+  Users, Clock, CheckCircle2, XCircle, IdCard, Filter, CheckSquare,
 } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
 import { supabase } from "@/integrations/supabase/client";
+
 import { useI18n } from "@/lib/i18n";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -88,6 +90,10 @@ export function AdmissionModule() {
   const [statusFilter, setStatusFilter] = useState<"all" | Status>("all");
   const [selected, setSelected] = useState<Application | null>(null);
   const [admitting, setAdmitting] = useState<Application | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkAdmitOpen, setBulkAdmitOpen] = useState(false);
+  const [bulkBusy, setBulkBusy] = useState(false);
+
 
 
   const T = (en: string, bn: string) => (lang === "en" ? en : bn);
@@ -188,9 +194,13 @@ export function AdmissionModule() {
     void load();
   };
 
-  const admitStudent = async (app: Application, classSectionId: string, rollNo: string) => {
+  const performAdmit = async (
+    app: Application,
+    classSectionId: string,
+    rollNo: string,
+  ): Promise<{ ok: true; studentNo: string; section: ClassSection } | { ok: false; error: string }> => {
     const section = sections.find((s) => s.id === classSectionId);
-    if (!section) return toast.error(T("Select a class section", "সেকশন নির্বাচন করুন"));
+    if (!section) return { ok: false, error: "Section not found" };
 
     const studentNo = `STU-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`;
 
@@ -217,7 +227,7 @@ export function AdmissionModule() {
       } as never)
       .select("id, student_no")
       .single();
-    if (sErr || !student) return toast.error(sErr?.message ?? "Failed to create student");
+    if (sErr || !student) return { ok: false, error: sErr?.message ?? "Failed to create student" };
 
     const { error: eErr } = await supabase.from("enrollments").insert({
       student_id: (student as { id: string }).id,
@@ -225,21 +235,64 @@ export function AdmissionModule() {
       academic_year: section.academic_year,
       roll_no: rollNo.trim() || null,
     } as never);
-    if (eErr) return toast.error(eErr.message);
+    if (eErr) return { ok: false, error: eErr.message };
 
     const { error: aErr } = await supabase
       .from("admission_applications")
       .update({ status: "approved", student_id: studentNo } as never)
       .eq("id", app.id);
-    if (aErr) return toast.error(aErr.message);
+    if (aErr) return { ok: false, error: aErr.message };
 
+    return { ok: true, studentNo, section };
+  };
+
+  const admitStudent = async (app: Application, classSectionId: string, rollNo: string) => {
+    const res = await performAdmit(app, classSectionId, rollNo);
+    if (!res.ok) return toast.error(res.error);
     toast.success(
-      T(`Admitted ${app.student_first_name} → ${section.grade} ${section.section} (${studentNo})`,
-        `${app.student_first_name} ভর্তি হয়েছে → ${section.grade} ${section.section} (${studentNo})`),
+      T(`Admitted ${app.student_first_name} → ${res.section.grade} ${res.section.section} (${res.studentNo})`,
+        `${app.student_first_name} ভর্তি হয়েছে → ${res.section.grade} ${res.section.section} (${res.studentNo})`),
     );
     setAdmitting(null);
     void load();
   };
+
+  const bulkAdmit = async (assignments: Record<string, string>) => {
+    // assignments: applicationId -> classSectionId
+    setBulkBusy(true);
+    let success = 0;
+    let failed = 0;
+    for (const app of rows) {
+      const sid = assignments[app.id];
+      if (!sid) continue;
+      if (app.status === "approved") continue;
+      const res = await performAdmit(app, sid, "");
+      if (res.ok) success++; else failed++;
+    }
+    setBulkBusy(false);
+    setBulkAdmitOpen(false);
+    setSelectedIds(new Set());
+    void load();
+    toast.success(
+      T(`Bulk admission complete: ${success} admitted${failed ? `, ${failed} failed` : ""}`,
+        `বাল্ক ভর্তি সম্পন্ন: ${success} জন ভর্তি${failed ? `, ${failed} ব্যর্থ` : ""}`),
+    );
+  };
+
+  const bulkReject = async () => {
+    if (selectedIds.size === 0) return;
+    const ids = Array.from(selectedIds);
+    const { error } = await supabase
+      .from("admission_applications")
+      .update({ status: "rejected" } as never)
+      .in("id", ids);
+    if (error) return toast.error(error.message);
+    toast.success(T(`Rejected ${ids.length} applications`, `${ids.length}টি আবেদন প্রত্যাখ্যাত`));
+    setSelectedIds(new Set());
+    void load();
+  };
+
+
 
 
   const saveNotes = async (id: string, notes: string) => {
@@ -433,10 +486,66 @@ export function AdmissionModule() {
             </div>
           </Card>
 
+          {selectedIds.size > 0 && (
+            <Card className="flex flex-col items-start justify-between gap-3 border-primary/40 bg-primary/5 p-3 shadow-card sm:flex-row sm:items-center">
+              <div className="flex items-center gap-2 text-sm">
+                <CheckSquare className="h-4 w-4 text-primary" />
+                <span className="font-medium">
+                  {T(`${selectedIds.size} selected`, `${selectedIds.size} নির্বাচিত`)}
+                </span>
+                <span className="text-xs text-muted-foreground">
+                  {(() => {
+                    const admittable = filtered.filter(
+                      (r) => selectedIds.has(r.id) && r.status !== "approved",
+                    ).length;
+                    return T(`${admittable} admittable`, `${admittable} ভর্তিযোগ্য`);
+                  })()}
+                </span>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Button size="sm" variant="ghost" onClick={() => setSelectedIds(new Set())}>
+                  {T("Clear", "মুছুন")}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="text-red-600 hover:text-red-700"
+                  onClick={bulkReject}
+                >
+                  <X className="mr-1 h-4 w-4" />{T("Reject", "প্রত্যাখ্যান")}
+                </Button>
+                <Button
+                  size="sm"
+                  className="bg-emerald-600 text-white hover:bg-emerald-700"
+                  onClick={() => setBulkAdmitOpen(true)}
+                >
+                  <Check className="mr-1 h-4 w-4" />{T("Admit selected", "নির্বাচিতদের ভর্তি করুন")}
+                </Button>
+              </div>
+            </Card>
+          )}
+
           <Card className="overflow-hidden shadow-card">
             <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead className="w-10">
+                    <Checkbox
+                      checked={
+                        filtered.length > 0 &&
+                        filtered.every((r) => selectedIds.has(r.id))
+                      }
+                      onCheckedChange={(v) => {
+                        setSelectedIds((prev) => {
+                          const next = new Set(prev);
+                          if (v) filtered.forEach((r) => next.add(r.id));
+                          else filtered.forEach((r) => next.delete(r.id));
+                          return next;
+                        });
+                      }}
+                      aria-label={T("Select all", "সব নির্বাচন")}
+                    />
+                  </TableHead>
                   <TableHead>{T("Application", "আবেদন")}</TableHead>
                   <TableHead>{T("Student", "শিক্ষার্থী")}</TableHead>
                   <TableHead>{T("Grade", "গ্রেড")}</TableHead>
@@ -448,15 +557,28 @@ export function AdmissionModule() {
               </TableHeader>
               <TableBody>
                 {loading ? (
-                  <TableRow><TableCell colSpan={7} className="py-10 text-center">
+                  <TableRow><TableCell colSpan={8} className="py-10 text-center">
                     <Loader2 className="mx-auto h-5 w-5 animate-spin text-muted-foreground" />
                   </TableCell></TableRow>
                 ) : filtered.length === 0 ? (
-                  <TableRow><TableCell colSpan={7} className="py-10 text-center text-sm text-muted-foreground">
+                  <TableRow><TableCell colSpan={8} className="py-10 text-center text-sm text-muted-foreground">
                     {T("No applications found.", "কোনো আবেদন পাওয়া যায়নি।")}
                   </TableCell></TableRow>
                 ) : filtered.map((r) => (
                   <TableRow key={r.id} className="cursor-pointer" onClick={() => setSelected(r)}>
+                    <TableCell onClick={(e) => e.stopPropagation()}>
+                      <Checkbox
+                        checked={selectedIds.has(r.id)}
+                        onCheckedChange={(v) => {
+                          setSelectedIds((prev) => {
+                            const next = new Set(prev);
+                            if (v) next.add(r.id); else next.delete(r.id);
+                            return next;
+                          });
+                        }}
+                        aria-label={T("Select row", "সারি নির্বাচন")}
+                      />
+                    </TableCell>
                     <TableCell className="font-mono text-xs">{r.application_no}</TableCell>
                     <TableCell className="font-medium">{r.student_first_name} {r.student_last_name}</TableCell>
                     <TableCell>{r.applying_for_grade}</TableCell>
@@ -478,6 +600,7 @@ export function AdmissionModule() {
               </TableBody>
             </Table>
           </Card>
+
         </TabsContent>
       </Tabs>
 
@@ -496,6 +619,18 @@ export function AdmissionModule() {
         onAdmit={admitStudent}
         T={T}
       />
+
+      <BulkAdmitDialog
+        open={bulkAdmitOpen}
+        apps={rows.filter((r) => selectedIds.has(r.id) && r.status !== "approved")}
+        sections={sections}
+        busy={bulkBusy}
+        onClose={() => setBulkAdmitOpen(false)}
+        onConfirm={bulkAdmit}
+        T={T}
+      />
+
+
 
 
       <Card className="flex flex-col items-start gap-4 border-dashed p-6 sm:flex-row sm:items-center sm:justify-between">
@@ -755,3 +890,145 @@ function AdmitDialog({ app, sections, onClose, onAdmit, T }: {
   );
 }
 
+function BulkAdmitDialog({ open, apps, sections, busy, onClose, onConfirm, T }: {
+  open: boolean;
+  apps: Application[];
+  sections: ClassSection[];
+  busy: boolean;
+  onClose: () => void;
+  onConfirm: (assignments: Record<string, string>) => Promise<unknown> | unknown;
+  T: (en: string, bn: string) => string;
+}) {
+  // Group apps by grade + academic_year for one section pick per group.
+  const groups = useMemo(() => {
+    const map = new Map<string, { grade: string; year: string; apps: Application[] }>();
+    for (const a of apps) {
+      const key = `${a.applying_for_grade}__${a.academic_year}`;
+      if (!map.has(key)) map.set(key, { grade: a.applying_for_grade, year: a.academic_year, apps: [] });
+      map.get(key)!.apps.push(a);
+    }
+    return Array.from(map.entries()).map(([key, v]) => ({ key, ...v }));
+  }, [apps]);
+
+  const [groupSection, setGroupSection] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    if (!open) return;
+    const initial: Record<string, string> = {};
+    for (const g of groups) {
+      const opts = sections.filter((s) => s.grade === g.grade && s.academic_year === g.year);
+      if (opts[0]) initial[g.key] = opts[0].id;
+    }
+    setGroupSection(initial);
+  }, [open, groups, sections]);
+
+  const confirm = () => {
+    const assignments: Record<string, string> = {};
+    for (const g of groups) {
+      const sid = groupSection[g.key];
+      if (!sid) continue;
+      for (const a of g.apps) assignments[a.id] = sid;
+    }
+    void onConfirm(assignments);
+  };
+
+  const anyMissing = groups.some((g) => !groupSection[g.key]);
+  const totalAssigned = groups.reduce(
+    (acc, g) => acc + (groupSection[g.key] ? g.apps.length : 0),
+    0,
+  );
+
+  return (
+    <Dialog open={open} onOpenChange={(o) => !o && !busy && onClose()}>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <CheckSquare className="h-5 w-5 text-emerald-600" />
+            {T("Bulk admit to SIS", "বাল্ক SIS ভর্তি")}
+          </DialogTitle>
+          <DialogDescription>
+            {T(
+              `Assign a class section for each grade group. ${apps.length} applications will be admitted.`,
+              `প্রতিটি গ্রেড গ্রুপের জন্য সেকশন নির্বাচন করুন। ${apps.length}টি আবেদন ভর্তি হবে।`,
+            )}
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="max-h-[50vh] space-y-3 overflow-y-auto">
+          {groups.length === 0 ? (
+            <div className="rounded-md border border-dashed p-4 text-center text-sm text-muted-foreground">
+              {T("No admittable applications selected.", "কোনো ভর্তিযোগ্য আবেদন নির্বাচিত নেই।")}
+            </div>
+          ) : groups.map((g) => {
+            const opts = sections.filter(
+              (s) => s.grade === g.grade && s.academic_year === g.year,
+            );
+            return (
+              <div key={g.key} className="rounded-lg border p-3">
+                <div className="mb-2 flex items-center justify-between text-sm">
+                  <div className="font-medium">
+                    {g.grade} <span className="text-xs text-muted-foreground">· {g.year}</span>
+                  </div>
+                  <Badge variant="outline" className="text-xs">
+                    {g.apps.length} {T("students", "শিক্ষার্থী")}
+                  </Badge>
+                </div>
+                {opts.length === 0 ? (
+                  <div className="rounded-md border border-dashed p-2 text-xs text-muted-foreground">
+                    {T(
+                      `No sections for ${g.grade} (${g.year}). Skipped.`,
+                      `${g.grade} (${g.year}) এর জন্য সেকশন নেই। বাদ পড়েছে।`,
+                    )}
+                  </div>
+                ) : (
+                  <Select
+                    value={groupSection[g.key] ?? ""}
+                    onValueChange={(v) => setGroupSection((s) => ({ ...s, [g.key]: v }))}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder={T("Select section", "সেকশন নির্বাচন")} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {opts.map((s) => (
+                        <SelectItem key={s.id} value={s.id}>
+                          {T("Section", "সেকশন")} {s.section}
+                          <span className="ml-2 text-xs text-muted-foreground">
+                            ({T("cap", "ধারণ")} {s.capacity})
+                          </span>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+                <div className="mt-2 text-xs text-muted-foreground">
+                  {g.apps.slice(0, 3).map((a) => `${a.student_first_name} ${a.student_last_name}`).join(", ")}
+                  {g.apps.length > 3 ? ` +${g.apps.length - 3}` : ""}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        <DialogFooter className="flex-wrap gap-2 sm:justify-between">
+          <div className="text-xs text-muted-foreground">
+            {T(`${totalAssigned} of ${apps.length} will be admitted`,
+               `${apps.length} এর মধ্যে ${totalAssigned} জন ভর্তি হবে`)}
+          </div>
+          <div className="flex gap-2">
+            <Button variant="ghost" onClick={onClose} disabled={busy}>
+              {T("Cancel", "বাতিল")}
+            </Button>
+            <Button
+              className="gap-2 bg-emerald-600 text-white hover:bg-emerald-700"
+              disabled={busy || totalAssigned === 0 || anyMissing}
+              onClick={confirm}
+            >
+              {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
+              {T(`Admit ${totalAssigned}`, `${totalAssigned} জন ভর্তি করুন`)}
+            </Button>
+          </div>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
