@@ -890,3 +890,145 @@ function AdmitDialog({ app, sections, onClose, onAdmit, T }: {
   );
 }
 
+function BulkAdmitDialog({ open, apps, sections, busy, onClose, onConfirm, T }: {
+  open: boolean;
+  apps: Application[];
+  sections: ClassSection[];
+  busy: boolean;
+  onClose: () => void;
+  onConfirm: (assignments: Record<string, string>) => Promise<unknown> | unknown;
+  T: (en: string, bn: string) => string;
+}) {
+  // Group apps by grade + academic_year for one section pick per group.
+  const groups = useMemo(() => {
+    const map = new Map<string, { grade: string; year: string; apps: Application[] }>();
+    for (const a of apps) {
+      const key = `${a.applying_for_grade}__${a.academic_year}`;
+      if (!map.has(key)) map.set(key, { grade: a.applying_for_grade, year: a.academic_year, apps: [] });
+      map.get(key)!.apps.push(a);
+    }
+    return Array.from(map.entries()).map(([key, v]) => ({ key, ...v }));
+  }, [apps]);
+
+  const [groupSection, setGroupSection] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    if (!open) return;
+    const initial: Record<string, string> = {};
+    for (const g of groups) {
+      const opts = sections.filter((s) => s.grade === g.grade && s.academic_year === g.year);
+      if (opts[0]) initial[g.key] = opts[0].id;
+    }
+    setGroupSection(initial);
+  }, [open, groups, sections]);
+
+  const confirm = () => {
+    const assignments: Record<string, string> = {};
+    for (const g of groups) {
+      const sid = groupSection[g.key];
+      if (!sid) continue;
+      for (const a of g.apps) assignments[a.id] = sid;
+    }
+    void onConfirm(assignments);
+  };
+
+  const anyMissing = groups.some((g) => !groupSection[g.key]);
+  const totalAssigned = groups.reduce(
+    (acc, g) => acc + (groupSection[g.key] ? g.apps.length : 0),
+    0,
+  );
+
+  return (
+    <Dialog open={open} onOpenChange={(o) => !o && !busy && onClose()}>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <CheckSquare className="h-5 w-5 text-emerald-600" />
+            {T("Bulk admit to SIS", "বাল্ক SIS ভর্তি")}
+          </DialogTitle>
+          <DialogDescription>
+            {T(
+              `Assign a class section for each grade group. ${apps.length} applications will be admitted.`,
+              `প্রতিটি গ্রেড গ্রুপের জন্য সেকশন নির্বাচন করুন। ${apps.length}টি আবেদন ভর্তি হবে।`,
+            )}
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="max-h-[50vh] space-y-3 overflow-y-auto">
+          {groups.length === 0 ? (
+            <div className="rounded-md border border-dashed p-4 text-center text-sm text-muted-foreground">
+              {T("No admittable applications selected.", "কোনো ভর্তিযোগ্য আবেদন নির্বাচিত নেই।")}
+            </div>
+          ) : groups.map((g) => {
+            const opts = sections.filter(
+              (s) => s.grade === g.grade && s.academic_year === g.year,
+            );
+            return (
+              <div key={g.key} className="rounded-lg border p-3">
+                <div className="mb-2 flex items-center justify-between text-sm">
+                  <div className="font-medium">
+                    {g.grade} <span className="text-xs text-muted-foreground">· {g.year}</span>
+                  </div>
+                  <Badge variant="outline" className="text-xs">
+                    {g.apps.length} {T("students", "শিক্ষার্থী")}
+                  </Badge>
+                </div>
+                {opts.length === 0 ? (
+                  <div className="rounded-md border border-dashed p-2 text-xs text-muted-foreground">
+                    {T(
+                      `No sections for ${g.grade} (${g.year}). Skipped.`,
+                      `${g.grade} (${g.year}) এর জন্য সেকশন নেই। বাদ পড়েছে।`,
+                    )}
+                  </div>
+                ) : (
+                  <Select
+                    value={groupSection[g.key] ?? ""}
+                    onValueChange={(v) => setGroupSection((s) => ({ ...s, [g.key]: v }))}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder={T("Select section", "সেকশন নির্বাচন")} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {opts.map((s) => (
+                        <SelectItem key={s.id} value={s.id}>
+                          {T("Section", "সেকশন")} {s.section}
+                          <span className="ml-2 text-xs text-muted-foreground">
+                            ({T("cap", "ধারণ")} {s.capacity})
+                          </span>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+                <div className="mt-2 text-xs text-muted-foreground">
+                  {g.apps.slice(0, 3).map((a) => `${a.student_first_name} ${a.student_last_name}`).join(", ")}
+                  {g.apps.length > 3 ? ` +${g.apps.length - 3}` : ""}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        <DialogFooter className="flex-wrap gap-2 sm:justify-between">
+          <div className="text-xs text-muted-foreground">
+            {T(`${totalAssigned} of ${apps.length} will be admitted`,
+               `${apps.length} এর মধ্যে ${totalAssigned} জন ভর্তি হবে`)}
+          </div>
+          <div className="flex gap-2">
+            <Button variant="ghost" onClick={onClose} disabled={busy}>
+              {T("Cancel", "বাতিল")}
+            </Button>
+            <Button
+              className="gap-2 bg-emerald-600 text-white hover:bg-emerald-700"
+              disabled={busy || totalAssigned === 0 || anyMissing}
+              onClick={confirm}
+            >
+              {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
+              {T(`Admit ${totalAssigned}`, `${totalAssigned} জন ভর্তি করুন`)}
+            </Button>
+          </div>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
