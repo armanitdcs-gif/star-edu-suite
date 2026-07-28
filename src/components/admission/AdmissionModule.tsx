@@ -2,9 +2,11 @@ import { useEffect, useMemo, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import {
   ArrowLeft, UserPlus, Search, Loader2, Check, X, Sparkles,
-  Users, Clock, CheckCircle2, XCircle, IdCard, Filter,
+  Users, Clock, CheckCircle2, XCircle, IdCard, Filter, CheckSquare,
 } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
 import { supabase } from "@/integrations/supabase/client";
+
 import { useI18n } from "@/lib/i18n";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
