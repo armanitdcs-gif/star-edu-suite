@@ -448,6 +448,8 @@ export function AdmissionModule() {
         <TabsList>
           <TabsTrigger value="apply">{T("New Application", "নতুন আবেদন")}</TabsTrigger>
           <TabsTrigger value="list">{T("Applications", "সব আবেদন")} · {rows.length}</TabsTrigger>
+          <TabsTrigger value="audit">{T("Audit log", "অডিট লগ")} · {audit.length}</TabsTrigger>
+
         </TabsList>
 
         {/* APPLY */}
