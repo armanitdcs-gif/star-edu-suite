@@ -76,35 +76,6 @@ const statusStyles: Record<Status, string> = {
   rejected: "bg-red-500/15 text-red-600 border-red-500/30",
 };
 
-type AuditLog = Database["public"]["Tables"]["admission_audit_logs"]["Row"];
-
-const auditActionStyles: Record<string, string> = {
-  admit: "bg-emerald-500/15 text-emerald-600 border-emerald-500/30",
-  bulk_admit: "bg-emerald-500/15 text-emerald-600 border-emerald-500/30",
-  reject: "bg-red-500/15 text-red-600 border-red-500/30",
-  bulk_reject: "bg-red-500/15 text-red-600 border-red-500/30",
-  status_change: "bg-sky-500/15 text-sky-600 border-sky-500/30",
-};
-
-const auditActionLabel = (action: string, T: (en: string, bn: string) => string) => {
-  switch (action) {
-    case "admit": return T("Admitted", "ভর্তি");
-    case "bulk_admit": return T("Bulk admit", "বাল্ক ভর্তি");
-    case "reject": return T("Rejected", "প্রত্যাখ্যাত");
-    case "bulk_reject": return T("Bulk reject", "বাল্ক প্রত্যাখ্যান");
-    case "status_change": return T("Status change", "স্ট্যাটাস পরিবর্তন");
-    default: return action;
-  }
-};
-
-const formatAuditDetails = (details: unknown) => {
-  if (!details || typeof details !== "object") return "—";
-  const entries = Object.entries(details as Record<string, unknown>);
-  if (entries.length === 0) return "—";
-  return entries.map(([k, v]) => `${k}: ${typeof v === "object" ? JSON.stringify(v) : String(v)}`).join(" · ");
-};
-
-
 export function AdmissionModule() {
   const { lang } = useI18n();
   const [tab, setTab] = useState("apply");
@@ -122,8 +93,8 @@ export function AdmissionModule() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkAdmitOpen, setBulkAdmitOpen] = useState(false);
   const [bulkBusy, setBulkBusy] = useState(false);
-  const [audit, setAudit] = useState<AuditLog[]>([]);
-  const [auditLoading, setAuditLoading] = useState(true);
+
+
 
   const T = (en: string, bn: string) => (lang === "en" ? en : bn);
 
@@ -138,45 +109,13 @@ export function AdmissionModule() {
     setLoading(false);
   };
 
-  const loadAudit = async () => {
-    setAuditLoading(true);
-    const { data } = await supabase
-      .from("admission_audit_logs")
-      .select("*")
-      .order("created_at", { ascending: false })
-      .limit(200);
-    setAudit(data ?? []);
-    setAuditLoading(false);
-  };
-
-  const logAudit = async (
-    action: string,
-    apps: Application[],
-    details: Record<string, unknown> = {},
-  ) => {
-    const { data: auth } = await supabase.auth.getUser();
-    const { error } = await supabase.from("admission_audit_logs").insert({
-      action,
-      actor_id: auth.user?.id ?? null,
-      actor_email: auth.user?.email ?? null,
-      application_ids: apps.map((a) => a.id),
-      application_nos: apps.map((a) => a.application_no),
-      affected_count: apps.length,
-      details: details as never,
-    } as never);
-    if (error) toast.error(error.message);
-    void loadAudit();
-  };
-
   useEffect(() => {
     void load();
-    void loadAudit();
     void (async () => {
       const { data } = await supabase.from("class_sections").select("*").order("grade").order("section");
       setSections(data ?? []);
     })();
   }, []);
-
 
 
   const stats = useMemo(() => ({
@@ -251,17 +190,9 @@ export function AdmissionModule() {
       .eq("id", id);
     if (error) return toast.error(error.message);
     toast.success(T("Status updated", "স্ট্যাটাস আপডেট হয়েছে"));
-    const app = rows.find((r) => r.id === id) ?? (selected?.id === id ? selected : null);
-    if (app) {
-      void logAudit(status === "rejected" ? "reject" : "status_change", [app], {
-        from: app.status,
-        to: status,
-      });
-    }
     setSelected((s) => (s && s.id === id ? { ...s, status } as Application : s));
     void load();
   };
-
 
   const performAdmit = async (
     app: Application,
@@ -322,12 +253,6 @@ export function AdmissionModule() {
       T(`Admitted ${app.student_first_name} → ${res.section.grade} ${res.section.section} (${res.studentNo})`,
         `${app.student_first_name} ভর্তি হয়েছে → ${res.section.grade} ${res.section.section} (${res.studentNo})`),
     );
-    void logAudit("admit", [app], {
-      student_no: res.studentNo,
-      section: `${res.section.grade} ${res.section.section}`,
-      academic_year: res.section.academic_year,
-      roll_no: rollNo.trim() || null,
-    });
     setAdmitting(null);
     void load();
   };
@@ -337,33 +262,16 @@ export function AdmissionModule() {
     setBulkBusy(true);
     let success = 0;
     let failed = 0;
-    const admitted: Application[] = [];
-    const failedNos: string[] = [];
-    const sectionCounts: Record<string, number> = {};
     for (const app of rows) {
       const sid = assignments[app.id];
       if (!sid) continue;
       if (app.status === "approved") continue;
       const res = await performAdmit(app, sid, "");
-      if (res.ok) {
-        success++;
-        admitted.push(app);
-        const key = `${res.section.grade} ${res.section.section}`;
-        sectionCounts[key] = (sectionCounts[key] ?? 0) + 1;
-      } else {
-        failed++;
-        failedNos.push(app.application_no);
-      }
+      if (res.ok) success++; else failed++;
     }
     setBulkBusy(false);
     setBulkAdmitOpen(false);
     setSelectedIds(new Set());
-    void logAudit("bulk_admit", admitted, {
-      admitted: success,
-      failed,
-      failed_applications: failedNos,
-      sections: sectionCounts,
-    });
     void load();
     toast.success(
       T(`Bulk admission complete: ${success} admitted${failed ? `, ${failed} failed` : ""}`,
@@ -374,18 +282,15 @@ export function AdmissionModule() {
   const bulkReject = async () => {
     if (selectedIds.size === 0) return;
     const ids = Array.from(selectedIds);
-    const apps = rows.filter((r) => ids.includes(r.id));
     const { error } = await supabase
       .from("admission_applications")
       .update({ status: "rejected" } as never)
       .in("id", ids);
     if (error) return toast.error(error.message);
     toast.success(T(`Rejected ${ids.length} applications`, `${ids.length}টি আবেদন প্রত্যাখ্যাত`));
-    void logAudit("bulk_reject", apps, { rejected: apps.length });
     setSelectedIds(new Set());
     void load();
   };
-
 
 
 
@@ -448,8 +353,6 @@ export function AdmissionModule() {
         <TabsList>
           <TabsTrigger value="apply">{T("New Application", "নতুন আবেদন")}</TabsTrigger>
           <TabsTrigger value="list">{T("Applications", "সব আবেদন")} · {rows.length}</TabsTrigger>
-          <TabsTrigger value="audit">{T("Audit log", "অডিট লগ")} · {audit.length}</TabsTrigger>
-
         </TabsList>
 
         {/* APPLY */}
@@ -699,59 +602,7 @@ export function AdmissionModule() {
           </Card>
 
         </TabsContent>
-
-        {/* AUDIT LOG */}
-        <TabsContent value="audit" className="space-y-4">
-          <Card className="overflow-hidden shadow-card">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>{T("When", "কখন")}</TableHead>
-                  <TableHead>{T("Action", "অ্যাকশন")}</TableHead>
-                  <TableHead>{T("Actor", "কে করেছে")}</TableHead>
-                  <TableHead>{T("Applications", "আবেদনসমূহ")}</TableHead>
-                  <TableHead>{T("Details", "বিস্তারিত")}</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {auditLoading ? (
-                  <TableRow><TableCell colSpan={5} className="py-10 text-center">
-                    <Loader2 className="mx-auto h-5 w-5 animate-spin text-muted-foreground" />
-                  </TableCell></TableRow>
-                ) : audit.length === 0 ? (
-                  <TableRow><TableCell colSpan={5} className="py-10 text-center text-sm text-muted-foreground">
-                    {T("No audit entries yet.", "এখনো কোনো অডিট এন্ট্রি নেই।")}
-                  </TableCell></TableRow>
-                ) : audit.map((a) => (
-                  <TableRow key={a.id}>
-                    <TableCell className="whitespace-nowrap text-xs text-muted-foreground">
-                      {new Date(a.created_at).toLocaleString()}
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant="outline" className={auditActionStyles[a.action] ?? "bg-muted"}>
-                        {auditActionLabel(a.action, T)}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-sm">{a.actor_email ?? T("System / demo", "সিস্টেম / ডেমো")}</TableCell>
-                    <TableCell className="max-w-[280px]">
-                      <div className="text-xs font-medium">
-                        {T(`${a.affected_count} application(s)`, `${a.affected_count}টি আবেদন`)}
-                      </div>
-                      <div className="truncate font-mono text-[11px] text-muted-foreground">
-                        {(a.application_nos ?? []).join(", ")}
-                      </div>
-                    </TableCell>
-                    <TableCell className="max-w-[280px] truncate text-xs text-muted-foreground">
-                      {formatAuditDetails(a.details)}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </Card>
-        </TabsContent>
       </Tabs>
-
 
       <ReviewDialog
         app={selected}
