@@ -122,8 +122,8 @@ export function AdmissionModule() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkAdmitOpen, setBulkAdmitOpen] = useState(false);
   const [bulkBusy, setBulkBusy] = useState(false);
-
-
+  const [audit, setAudit] = useState<AuditLog[]>([]);
+  const [auditLoading, setAuditLoading] = useState(true);
 
   const T = (en: string, bn: string) => (lang === "en" ? en : bn);
 
@@ -138,13 +138,45 @@ export function AdmissionModule() {
     setLoading(false);
   };
 
+  const loadAudit = async () => {
+    setAuditLoading(true);
+    const { data } = await supabase
+      .from("admission_audit_logs")
+      .select("*")
+      .order("created_at", { ascending: false })
+      .limit(200);
+    setAudit(data ?? []);
+    setAuditLoading(false);
+  };
+
+  const logAudit = async (
+    action: string,
+    apps: Application[],
+    details: Record<string, unknown> = {},
+  ) => {
+    const { data: auth } = await supabase.auth.getUser();
+    const { error } = await supabase.from("admission_audit_logs").insert({
+      action,
+      actor_id: auth.user?.id ?? null,
+      actor_email: auth.user?.email ?? null,
+      application_ids: apps.map((a) => a.id),
+      application_nos: apps.map((a) => a.application_no),
+      affected_count: apps.length,
+      details: details as never,
+    } as never);
+    if (error) toast.error(error.message);
+    void loadAudit();
+  };
+
   useEffect(() => {
     void load();
+    void loadAudit();
     void (async () => {
       const { data } = await supabase.from("class_sections").select("*").order("grade").order("section");
       setSections(data ?? []);
     })();
   }, []);
+
 
 
   const stats = useMemo(() => ({
