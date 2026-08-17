@@ -98,6 +98,42 @@ export type Database = {
         }
         Relationships: []
       }
+      admission_audit_logs: {
+        Row: {
+          action: string
+          actor_email: string | null
+          actor_id: string | null
+          affected_count: number
+          application_ids: string[]
+          application_nos: string[]
+          created_at: string
+          details: Json
+          id: string
+        }
+        Insert: {
+          action: string
+          actor_email?: string | null
+          actor_id?: string | null
+          affected_count?: number
+          application_ids?: string[]
+          application_nos?: string[]
+          created_at?: string
+          details?: Json
+          id?: string
+        }
+        Update: {
+          action?: string
+          actor_email?: string | null
+          actor_id?: string | null
+          affected_count?: number
+          application_ids?: string[]
+          application_nos?: string[]
+          created_at?: string
+          details?: Json
+          id?: string
+        }
+        Relationships: []
+      }
       class_sections: {
         Row: {
           academic_year: string
