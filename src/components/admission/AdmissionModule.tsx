@@ -602,7 +602,59 @@ export function AdmissionModule() {
           </Card>
 
         </TabsContent>
+
+        {/* AUDIT LOG */}
+        <TabsContent value="audit" className="space-y-4">
+          <Card className="overflow-hidden shadow-card">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>{T("When", "কখন")}</TableHead>
+                  <TableHead>{T("Action", "অ্যাকশন")}</TableHead>
+                  <TableHead>{T("Actor", "কে করেছে")}</TableHead>
+                  <TableHead>{T("Applications", "আবেদনসমূহ")}</TableHead>
+                  <TableHead>{T("Details", "বিস্তারিত")}</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {auditLoading ? (
+                  <TableRow><TableCell colSpan={5} className="py-10 text-center">
+                    <Loader2 className="mx-auto h-5 w-5 animate-spin text-muted-foreground" />
+                  </TableCell></TableRow>
+                ) : audit.length === 0 ? (
+                  <TableRow><TableCell colSpan={5} className="py-10 text-center text-sm text-muted-foreground">
+                    {T("No audit entries yet.", "এখনো কোনো অডিট এন্ট্রি নেই।")}
+                  </TableCell></TableRow>
+                ) : audit.map((a) => (
+                  <TableRow key={a.id}>
+                    <TableCell className="whitespace-nowrap text-xs text-muted-foreground">
+                      {new Date(a.created_at).toLocaleString()}
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant="outline" className={auditActionStyles[a.action] ?? "bg-muted"}>
+                        {auditActionLabel(a.action, T)}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-sm">{a.actor_email ?? T("System / demo", "সিস্টেম / ডেমো")}</TableCell>
+                    <TableCell className="max-w-[280px]">
+                      <div className="text-xs font-medium">
+                        {T(`${a.affected_count} application(s)`, `${a.affected_count}টি আবেদন`)}
+                      </div>
+                      <div className="truncate font-mono text-[11px] text-muted-foreground">
+                        {(a.application_nos ?? []).join(", ")}
+                      </div>
+                    </TableCell>
+                    <TableCell className="max-w-[280px] truncate text-xs text-muted-foreground">
+                      {formatAuditDetails(a.details)}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </Card>
+        </TabsContent>
       </Tabs>
+
 
       <ReviewDialog
         app={selected}
