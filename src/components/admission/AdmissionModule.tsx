@@ -251,9 +251,17 @@ export function AdmissionModule() {
       .eq("id", id);
     if (error) return toast.error(error.message);
     toast.success(T("Status updated", "স্ট্যাটাস আপডেট হয়েছে"));
+    const app = rows.find((r) => r.id === id) ?? (selected?.id === id ? selected : null);
+    if (app) {
+      void logAudit(status === "rejected" ? "reject" : "status_change", [app], {
+        from: app.status,
+        to: status,
+      });
+    }
     setSelected((s) => (s && s.id === id ? { ...s, status } as Application : s));
     void load();
   };
+
 
   const performAdmit = async (
     app: Application,
