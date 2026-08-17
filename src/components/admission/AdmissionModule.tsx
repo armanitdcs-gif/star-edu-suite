@@ -322,6 +322,12 @@ export function AdmissionModule() {
       T(`Admitted ${app.student_first_name} → ${res.section.grade} ${res.section.section} (${res.studentNo})`,
         `${app.student_first_name} ভর্তি হয়েছে → ${res.section.grade} ${res.section.section} (${res.studentNo})`),
     );
+    void logAudit("admit", [app], {
+      student_no: res.studentNo,
+      section: `${res.section.grade} ${res.section.section}`,
+      academic_year: res.section.academic_year,
+      roll_no: rollNo.trim() || null,
+    });
     setAdmitting(null);
     void load();
   };
@@ -331,16 +337,33 @@ export function AdmissionModule() {
     setBulkBusy(true);
     let success = 0;
     let failed = 0;
+    const admitted: Application[] = [];
+    const failedNos: string[] = [];
+    const sectionCounts: Record<string, number> = {};
     for (const app of rows) {
       const sid = assignments[app.id];
       if (!sid) continue;
       if (app.status === "approved") continue;
       const res = await performAdmit(app, sid, "");
-      if (res.ok) success++; else failed++;
+      if (res.ok) {
+        success++;
+        admitted.push(app);
+        const key = `${res.section.grade} ${res.section.section}`;
+        sectionCounts[key] = (sectionCounts[key] ?? 0) + 1;
+      } else {
+        failed++;
+        failedNos.push(app.application_no);
+      }
     }
     setBulkBusy(false);
     setBulkAdmitOpen(false);
     setSelectedIds(new Set());
+    void logAudit("bulk_admit", admitted, {
+      admitted: success,
+      failed,
+      failed_applications: failedNos,
+      sections: sectionCounts,
+    });
     void load();
     toast.success(
       T(`Bulk admission complete: ${success} admitted${failed ? `, ${failed} failed` : ""}`,
@@ -351,15 +374,18 @@ export function AdmissionModule() {
   const bulkReject = async () => {
     if (selectedIds.size === 0) return;
     const ids = Array.from(selectedIds);
+    const apps = rows.filter((r) => ids.includes(r.id));
     const { error } = await supabase
       .from("admission_applications")
       .update({ status: "rejected" } as never)
       .in("id", ids);
     if (error) return toast.error(error.message);
     toast.success(T(`Rejected ${ids.length} applications`, `${ids.length}টি আবেদন প্রত্যাখ্যাত`));
+    void logAudit("bulk_reject", apps, { rejected: apps.length });
     setSelectedIds(new Set());
     void load();
   };
+
 
 
 
