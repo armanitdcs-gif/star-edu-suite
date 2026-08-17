@@ -76,6 +76,35 @@ const statusStyles: Record<Status, string> = {
   rejected: "bg-red-500/15 text-red-600 border-red-500/30",
 };
 
+type AuditLog = Database["public"]["Tables"]["admission_audit_logs"]["Row"];
+
+const auditActionStyles: Record<string, string> = {
+  admit: "bg-emerald-500/15 text-emerald-600 border-emerald-500/30",
+  bulk_admit: "bg-emerald-500/15 text-emerald-600 border-emerald-500/30",
+  reject: "bg-red-500/15 text-red-600 border-red-500/30",
+  bulk_reject: "bg-red-500/15 text-red-600 border-red-500/30",
+  status_change: "bg-sky-500/15 text-sky-600 border-sky-500/30",
+};
+
+const auditActionLabel = (action: string, T: (en: string, bn: string) => string) => {
+  switch (action) {
+    case "admit": return T("Admitted", "ভর্তি");
+    case "bulk_admit": return T("Bulk admit", "বাল্ক ভর্তি");
+    case "reject": return T("Rejected", "প্রত্যাখ্যাত");
+    case "bulk_reject": return T("Bulk reject", "বাল্ক প্রত্যাখ্যান");
+    case "status_change": return T("Status change", "স্ট্যাটাস পরিবর্তন");
+    default: return action;
+  }
+};
+
+const formatAuditDetails = (details: unknown) => {
+  if (!details || typeof details !== "object") return "—";
+  const entries = Object.entries(details as Record<string, unknown>);
+  if (entries.length === 0) return "—";
+  return entries.map(([k, v]) => `${k}: ${typeof v === "object" ? JSON.stringify(v) : String(v)}`).join(" · ");
+};
+
+
 export function AdmissionModule() {
   const { lang } = useI18n();
   const [tab, setTab] = useState("apply");
