@@ -98,6 +98,45 @@ export type Database = {
         }
         Relationships: []
       }
+      audit_logs: {
+        Row: {
+          action: string
+          actor_email: string | null
+          actor_id: string | null
+          affected_count: number
+          created_at: string
+          details: Json
+          id: string
+          module: string
+          record_ids: string[]
+          record_refs: string[]
+        }
+        Insert: {
+          action: string
+          actor_email?: string | null
+          actor_id?: string | null
+          affected_count?: number
+          created_at?: string
+          details?: Json
+          id?: string
+          module: string
+          record_ids?: string[]
+          record_refs?: string[]
+        }
+        Update: {
+          action?: string
+          actor_email?: string | null
+          actor_id?: string | null
+          affected_count?: number
+          created_at?: string
+          details?: Json
+          id?: string
+          module?: string
+          record_ids?: string[]
+          record_refs?: string[]
+        }
+        Relationships: []
+      }
       class_sections: {
         Row: {
           academic_year: string
@@ -178,6 +217,75 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      leave_requests: {
+        Row: {
+          applicant_name: string
+          applicant_ref: string | null
+          applicant_type: Database["public"]["Enums"]["leave_applicant_type"]
+          approver_notes: string | null
+          contact_email: string | null
+          contact_phone: string
+          created_at: string
+          decided_at: string | null
+          decided_by_email: string | null
+          department: string | null
+          end_date: string
+          id: string
+          leave_type: Database["public"]["Enums"]["leave_type"]
+          reason: string
+          request_no: string
+          start_date: string
+          status: Database["public"]["Enums"]["leave_status"]
+          substitute_name: string | null
+          total_days: number
+          updated_at: string
+        }
+        Insert: {
+          applicant_name: string
+          applicant_ref?: string | null
+          applicant_type?: Database["public"]["Enums"]["leave_applicant_type"]
+          approver_notes?: string | null
+          contact_email?: string | null
+          contact_phone: string
+          created_at?: string
+          decided_at?: string | null
+          decided_by_email?: string | null
+          department?: string | null
+          end_date: string
+          id?: string
+          leave_type?: Database["public"]["Enums"]["leave_type"]
+          reason: string
+          request_no?: string
+          start_date: string
+          status?: Database["public"]["Enums"]["leave_status"]
+          substitute_name?: string | null
+          total_days?: number
+          updated_at?: string
+        }
+        Update: {
+          applicant_name?: string
+          applicant_ref?: string | null
+          applicant_type?: Database["public"]["Enums"]["leave_applicant_type"]
+          approver_notes?: string | null
+          contact_email?: string | null
+          contact_phone?: string
+          created_at?: string
+          decided_at?: string | null
+          decided_by_email?: string | null
+          department?: string | null
+          end_date?: string
+          id?: string
+          leave_type?: Database["public"]["Enums"]["leave_type"]
+          reason?: string
+          request_no?: string
+          start_date?: string
+          status?: Database["public"]["Enums"]["leave_status"]
+          substitute_name?: string | null
+          total_days?: number
+          updated_at?: string
+        }
+        Relationships: []
       }
       students: {
         Row: {
@@ -262,17 +370,55 @@ export type Database = {
           },
         ]
       }
+      user_roles: {
+        Row: {
+          created_at: string
+          id: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      has_role: {
+        Args: {
+          _role: Database["public"]["Enums"]["app_role"]
+          _user_id: string
+        }
+        Returns: boolean
+      }
+      is_staff: { Args: { _user_id: string }; Returns: boolean }
     }
     Enums: {
       admission_gender: "male" | "female" | "other"
       admission_status: "pending" | "interview" | "approved" | "rejected"
+      app_role: "admin" | "staff"
       enrollment_status: "active" | "transferred" | "left" | "completed"
+      leave_applicant_type: "staff" | "student"
+      leave_status: "pending" | "review" | "approved" | "rejected"
+      leave_type:
+        | "casual"
+        | "sick"
+        | "annual"
+        | "emergency"
+        | "unpaid"
+        | "maternity"
       student_status:
         | "active"
         | "inactive"
@@ -408,7 +554,18 @@ export const Constants = {
     Enums: {
       admission_gender: ["male", "female", "other"],
       admission_status: ["pending", "interview", "approved", "rejected"],
+      app_role: ["admin", "staff"],
       enrollment_status: ["active", "transferred", "left", "completed"],
+      leave_applicant_type: ["staff", "student"],
+      leave_status: ["pending", "review", "approved", "rejected"],
+      leave_type: [
+        "casual",
+        "sick",
+        "annual",
+        "emergency",
+        "unpaid",
+        "maternity",
+      ],
       student_status: [
         "active",
         "inactive",
